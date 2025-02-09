@@ -63,7 +63,8 @@ Contact.init(
     },
     {
         sequelize,
-        tableName: "contacts",
+        modelName: 'Contact',
+        tableName: 'contacts',
         timestamps: true,
         paranoid: true,
     }
