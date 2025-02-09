@@ -3,24 +3,24 @@ import sequelize from '../config/db';
 
 export interface contactAttributes {
     id: number,
-    phoneNumber?: String,
+    phonenumber?: String,
     email?: String,
-    linkedId?: number,
-    linkPrecedence: "primary" | "secondary",
-    createdAt: Date,
-    updatedAt: Date,
-    deletedAt?: Date,
+    linkedid?: number | null,
+    linkprecedence: "primary" | "secondary",
+    createdat: Date,
+    updatedat: Date,
+    deletedat?: Date | null,
 }
 
 class Contact extends Model<contactAttributes> implements contactAttributes {
     public id!: number;
-    public phoneNumber?: String;
+    public phonenumber?: String;
     public email?: String;
-    public linkedId?: number;
-    public linkPrecedence!: "primary" | "secondary";
-    public createdAt!: Date;
-    public updatedAt!: Date;
-    public deletedAt?: Date;
+    public linkedid?: number;
+    public linkprecedence!: "primary" | "secondary";
+    public createdat!: Date;
+    public updatedat!: Date;
+    public deletedat?: Date;
 }
 
 Contact.init(
@@ -30,7 +30,7 @@ Contact.init(
             autoIncrement: true,
             primaryKey: true,
         },
-        phoneNumber: {
+        phonenumber: {
             type: DataTypes.STRING,
             allowNull: true,
         },
@@ -38,27 +38,30 @@ Contact.init(
             type: DataTypes.STRING,
             allowNull: true,
         },
-        linkedId: {
+        linkedid: {
             type: DataTypes.INTEGER,
             allowNull: true,
         },
-        linkPrecedence: {
+        linkprecedence: {
             type: DataTypes.ENUM("primary", "secondary"),
             allowNull: false,
         },
-        createdAt: {
+        createdat: {
             type: DataTypes.DATE,
             allowNull: false,
             defaultValue: DataTypes.NOW,
+            field: "createdat",
         },
-        updatedAt: {
+        updatedat: {
             type: DataTypes.DATE,
             allowNull: false,
             defaultValue: DataTypes.NOW,
+            field: "updatedat",
         },
-        deletedAt: {
+        deletedat: {
             type: DataTypes.DATE,
             allowNull: true,
+            field: "deletedat",
         },
     },
     {
@@ -67,6 +70,9 @@ Contact.init(
         tableName: 'contacts',
         timestamps: true,
         paranoid: true,
+        createdAt: "createdat",
+        updatedAt: "updatedat",
+        deletedAt: "deletedat"
     }
 );
 
