@@ -25,19 +25,33 @@ export const indentifyContactService = async (email: string, phoneNumber: string
         } else {
             const existingContact = result.find(contact => contact.email === email && contact.phonenumber === phoneNumber);
             if (existingContact) {
-                return getConsolidatedResponse(existingContact);
+                return getConsolidatedResponse(existingContact, existingContact.id);
             }
 
             let primaryContact = result
                 .filter(contact => contact.linkprecedence === "primary")
                 .sort((a, b) => new Date(a.createdat).getTime() - new Date(b.createdat).getTime())[0];
 
-            if (!primaryContact) {
-                primaryContact = result[0];
-            }
+            // if (!primaryContact) {
+            //     primaryContact = result[0];
+            // }
 
             if (!primaryContact) {
-                throw new Error("Unexpected error: No primary contact found.");
+                let secondary = result
+                    .filter(contact => contact.linkprecedence === "secondary")
+                    .sort((a, b) => new Date(a.createdat).getTime() - new Date(b.createdat).getTime());
+                const linkedid = secondary.length > 0 ? secondary[0].linkedid : null;
+                const insertQuery = `INSERT INTO contacts (phonenumber, email, linkedid, linkprecedence, createdat, updatedat, deletedat) 
+                    VALUES (:phoneNumber, :email, :linkedid, 'secondary', NOW(), NOW(), NULL)
+                    RETURNING *`;
+
+                const [insertedData]: any = await sequelize.query(insertQuery, {
+                    replacements: { email, phoneNumber, linkedid },
+                    type: QueryTypes.INSERT,
+                    raw: true
+                });
+
+                return getConsolidatedResponse(primaryContact, linkedid);
             }
 
             const anotherPrimary = result.find(contact => contact.id !== primaryContact.id && contact.linkprecedence === "primary");
@@ -56,7 +70,7 @@ export const indentifyContactService = async (email: string, phoneNumber: string
                     type: QueryTypes.UPDATE,
                 });
 
-                return getConsolidatedResponse(primaryContact);
+                return getConsolidatedResponse(primaryContact, primaryContact.id);
             }
 
             const insertQuery = `INSERT INTO contacts (phonenumber, email, linkedid, linkprecedence, createdat, updatedat, deletedat) 
@@ -69,18 +83,19 @@ export const indentifyContactService = async (email: string, phoneNumber: string
                 raw: true,
             });
 
-            return getConsolidatedResponse(primaryContact);
+            return getConsolidatedResponse(primaryContact, primaryContact.id);
         }
     } catch (err) {
         console.log(err)
     }
 }
 
-const getConsolidatedResponse = async (primaryContact: contactAttributes) => {
+const getConsolidatedResponse = async (primaryContact: contactAttributes, linkedId: any) => {
+    const linkid = primaryContact != null ? primaryContact.id : linkedId;
     const contacts: contactAttributes[] = await sequelize.query(
         `SELECT * FROM contacts WHERE id = :primaryId OR linkedid = :primaryId`,
         {
-            replacements: { primaryId: primaryContact.id },
+            replacements: { primaryId: linkid },
             type: QueryTypes.SELECT,
             raw: true
         }
@@ -90,7 +105,7 @@ const getConsolidatedResponse = async (primaryContact: contactAttributes) => {
     const phoneNumbers: string[] = [...new Set(contacts.map(c => c.phonenumber).filter(Boolean))] as string[];
     const secondaryContactIds = contacts.filter(c => c.linkprecedence === "secondary").map(c => c.id);
 
-    return formatResponse(primaryContact.id, emails, phoneNumbers, secondaryContactIds);
+    return formatResponse(linkid, emails, phoneNumbers, secondaryContactIds);
 }
 
 const formatResponse = (primaryContactId: number, emails: string[], phoneNumbers: string[], secondaryContactIds: number[]) => {
