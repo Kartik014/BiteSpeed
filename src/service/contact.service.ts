@@ -7,7 +7,8 @@ export const indentifyContactService = async (email: string, phoneNumber: string
         const query = `SELECT * FROM contacts WHERE email = :email OR phonenumber = :phoneNumber`;
         const result: contactAttributes[] = await sequelize.query(query, {
             replacements: { email, phoneNumber },
-            type: QueryTypes.SELECT
+            type: QueryTypes.SELECT,
+            raw: true
         })
         if (result.length == 0) {
             const insertQuery = `INSERT INTO contacts (phonenumber, email, linkedid, linkprecedence, createdat, updatedat, deletedat) 
@@ -27,7 +28,9 @@ export const indentifyContactService = async (email: string, phoneNumber: string
                 return getConsolidatedResponse(existingContact);
             }
 
-            let primaryContact: contactAttributes | undefined = result.find(contact => contact.linkprecedence === "primary");
+            let primaryContact = result
+                .filter(contact => contact.linkprecedence === "primary")
+                .sort((a, b) => new Date(a.createdat).getTime() - new Date(b.createdat).getTime())[0];
 
             if (!primaryContact) {
                 primaryContact = result[0];
@@ -37,14 +40,33 @@ export const indentifyContactService = async (email: string, phoneNumber: string
                 throw new Error("Unexpected error: No primary contact found.");
             }
 
+            const anotherPrimary = result.find(contact => contact.id !== primaryContact.id && contact.linkprecedence === "primary");
+
+            if (anotherPrimary) {
+                const updateQuery = `UPDATE contacts SET linkedid = :primaryId, linkprecedence = 'secondary', updatedat = NOW() WHERE id = :secondaryId`;
+
+                await sequelize.query(updateQuery, {
+                    replacements: { primaryId: primaryContact.id, secondaryId: anotherPrimary.id },
+                    type: QueryTypes.UPDATE,
+                });
+
+                const relinkQuery = `UPDATE contacts SET linkedid = :primaryId WHERE linkedid = :oldPrimaryId`;
+                await sequelize.query(relinkQuery, {
+                    replacements: { primaryId: primaryContact.id, oldPrimaryId: anotherPrimary.id },
+                    type: QueryTypes.UPDATE,
+                });
+
+                return getConsolidatedResponse(primaryContact);
+            }
+
             const insertQuery = `INSERT INTO contacts (phonenumber, email, linkedid, linkprecedence, createdat, updatedat, deletedat) 
-            VALUES (:phoneNumber, :email, :linkedId, 'secondary', NOW(), NOW(), NULL)
-            RETURNING *`;
+                            VALUES (:phoneNumber, :email, :linkedId, 'secondary', NOW(), NOW(), NULL)
+                            RETURNING *`;
 
             const [insertedData]: any = await sequelize.query(insertQuery, {
                 replacements: { email, phoneNumber, linkedId: primaryContact.id },
                 type: QueryTypes.INSERT,
-                raw: true
+                raw: true,
             });
 
             return getConsolidatedResponse(primaryContact);
